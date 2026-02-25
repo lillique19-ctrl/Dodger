@@ -2,69 +2,75 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nature & Blade: Hard-Wired</title>
+    <title>Nature & Blade: Fixed Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; color: white; }
         #loading-screen {
-            position: fixed; inset: 0; background: #000; z-index: 999;
+            position: fixed; inset: 0; background: radial-gradient(circle, #1a1a1a, #000); z-index: 999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
-        #hud { position: absolute; inset: 0; pointer-events: none; padding: 20px; display: none; }
-        .hp-bar { width: 200px; height: 10px; border: 1px solid white; background: #222; }
-        #hp-fill { width: 100%; height: 100%; background: #ff0044; }
-        #action-prompt { position: fixed; top: 70%; left: 50%; transform: translateX(-50%); color: #ff0044; display: none; font-weight: bold; }
-        .btn { background: #ff0044; color: white; border: none; padding: 20px 40px; cursor: pointer; font-size: 1.2rem; }
-        #error-log { color: #ffcc00; font-size: 0.8rem; margin-top: 20px; }
+        #hud { position: absolute; inset: 0; pointer-events: none; padding: 25px; display: none; }
+        .hp-bar { width: 250px; height: 12px; border: 2px solid #fff; background: #222; box-shadow: 0 0 10px rgba(255,0,0,0.5); }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0044, #800000); }
+        #story-text { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); color: #ff0044; font-size: 1.5rem; text-align: center; opacity: 0; transition: 2s; }
+        .btn { background: #ff0044; color: white; border: none; padding: 20px 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; box-shadow: 0 0 20px #ff0044; }
+        .btn:hover { transform: scale(1.1); background: #ff4d79; }
+        #error-log { color: #555; font-size: 0.7rem; margin-top: 20px; }
     </style>
 </head>
 <body>
 
     <div id="loading-screen">
-        <h1 style="color: #ff0044;">NATURE & BLADE</h1>
+        <h1 style="color: #ff0044; font-size: 3rem; margin-bottom: 10px;">NATURE & BLADE</h1>
+        <p style="color: #888; margin-bottom: 30px;">[ Gore & Adventure Simulation ]</p>
         <button id="start-btn" class="btn">ENTER WORLD</button>
-        <div id="error-log">Waiting for engine...</div>
+        <div id="error-log">Verifying Engine Components...</div>
     </div>
 
     <div id="hud">
         <div class="hp-bar"><div id="hp-fill"></div></div>
-        <div style="margin-top: 10px;">C: Stealth | V: Change POV | Click: Attack</div>
-        <div id="action-prompt">PRESS [E] FOR TAKEDOWN</div>
+        <div id="story-text">THE RED FOREST AWAKENS... <br> Slay the Corrupted.</div>
+        <div style="margin-top: 15px; color: #00ffcc;">C: Stealth | V: View | Q: Weapons | Left Click: Attack</div>
     </div>
 
     <script>
-        // --- GLOBAL VARIABLES ---
         let scene, camera, renderer, player, clock;
         let isRunning = false;
         let enemies = [], blood = [], keys = {};
         let isStealth = false, isFirstPerson = false;
-        let yaw = new THREE.Object3D();
-        let pitch = new THREE.Object3D();
+        let yaw = new THREE.Object3D(), pitch = new THREE.Object3D();
 
-        // --- THE ENGINE ---
         function init() {
             try {
                 scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x050505);
-                scene.fog = new THREE.FogExp2(0x050505, 0.05);
+                scene.background = new THREE.Color(0x020202);
+                scene.fog = new THREE.FogExp2(0x020202, 0.04);
 
                 camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
                 renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 document.body.appendChild(renderer.domElement);
 
-                // World Setup
-                const light = new THREE.DirectionalLight(0xffffff, 1);
-                light.position.set(5, 10, 5);
-                scene.add(light);
-                scene.add(new THREE.AmbientLight(0x404040));
+                // Lighting
+                scene.add(new THREE.AmbientLight(0x404040, 0.5));
+                const sun = new THREE.DirectionalLight(0xffffff, 1);
+                sun.position.set(5, 15, 5);
+                scene.add(sun);
 
-                const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x111a11}));
-                ground.rotation.x = -Math.PI/2;
+                // Nature (Ground)
+                const ground = new THREE.Mesh(
+                    new THREE.PlaneGeometry(200, 200),
+                    new THREE.MeshStandardMaterial({color: 0x101510})
+                );
+                ground.rotation.x = -Math.PI / 2;
                 scene.add(ground);
 
-                // Player Rig
-                player = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshStandardMaterial({color: 0x444444}));
+                // Player (Using Cylinder instead of Capsule to prevent errors)
+                player = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.5, 0.5, 2, 16),
+                    new THREE.MeshStandardMaterial({color: 0x333333})
+                );
                 player.position.y = 1;
                 scene.add(player);
                 
@@ -73,20 +79,21 @@
                 pitch.add(camera);
 
                 // Enemies
-                for(let i=0; i<5; i++) {
-                    let e = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({color: 0xaa0000}));
-                    e.position.set(Math.random()*20-10, 1, Math.random()*20-10);
-                    e.userData = {hp: 100};
+                for(let i=0; i<8; i++) {
+                    let e = new THREE.Mesh(
+                        new THREE.BoxGeometry(1.2, 2, 1.2), 
+                        new THREE.MeshStandardMaterial({color: 0x880000})
+                    );
+                    e.position.set(Math.random()*40-20, 1, Math.random()*40-20);
                     scene.add(e);
                     enemies.push(e);
                 }
 
                 clock = new THREE.Clock();
-                document.getElementById('error-log').innerText = "Engine Ready. Click Enter.";
-                
+                document.getElementById('error-log').innerText = "All systems green.";
                 setupControls();
             } catch (err) {
-                document.getElementById('error-log').innerText = "FATAL ERROR: " + err.message;
+                document.getElementById('error-log').innerText = "ERROR: " + err.message;
             }
         }
 
@@ -95,14 +102,20 @@
                 isRunning = true;
                 document.getElementById('loading-screen').style.display = 'none';
                 document.getElementById('hud').style.display = 'block';
+                
+                // Show Story Text
+                const story = document.getElementById('story-text');
+                story.style.opacity = '1';
+                setTimeout(() => story.style.opacity = '0', 4000);
+
                 renderer.domElement.requestPointerLock();
                 animate();
             };
 
             window.addEventListener('keydown', e => {
                 keys[e.code] = true;
-                if(e.code === 'KeyC') isStealth = !isStealth;
                 if(e.code === 'KeyV') isFirstPerson = !isFirstPerson;
+                if(e.code === 'KeyC') isStealth = !isStealth;
             });
             window.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -110,9 +123,24 @@
                 if (document.pointerLockElement === renderer.domElement) {
                     yaw.rotation.y -= e.movementX * 0.002;
                     pitch.rotation.x -= e.movementY * 0.002;
-                    pitch.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch.rotation.x));
+                    pitch.rotation.x = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch.rotation.x));
                 }
             });
+
+            // Gore on click
+            window.addEventListener('mousedown', () => {
+                if(isRunning) spawnBlood(player.position, 15);
+            });
+        }
+
+        function spawnBlood(pos, count) {
+            for(let i=0; i<count; i++) {
+                let p = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshBasicMaterial({color: 0xaa0000}));
+                p.position.copy(pos);
+                p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.4, (Math.random()-0.5)*0.3);
+                scene.add(p);
+                blood.push(p);
+            }
         }
 
         function animate() {
@@ -120,9 +148,8 @@
             requestAnimationFrame(animate);
 
             let delta = clock.getDelta();
-            let speed = (isStealth ? 3 : 10) * delta;
+            let speed = (isStealth ? 4 : 12) * delta;
 
-            // Basic Movement
             if(keys['KeyW']) player.translateZ(-speed);
             if(keys['KeyS']) player.translateZ(speed);
             if(keys['KeyA']) player.translateX(-speed);
@@ -131,25 +158,23 @@
             yaw.position.copy(player.position);
             player.rotation.y = yaw.rotation.y;
 
-            // Camera View
             if(isFirstPerson) {
-                camera.position.set(0, 1.5, 0);
+                camera.position.set(0, 1.6, 0);
             } else {
-                camera.position.set(0, 2, 6);
+                camera.position.set(0, 3, 7);
                 camera.lookAt(new THREE.Vector3(0, 1, -2).applyQuaternion(camera.quaternion).add(camera.position));
             }
 
-            // Simple AI Chase
-            enemies.forEach(e => {
-                if(e.position.distanceTo(player.position) < 10 && !isStealth) {
-                    e.position.lerp(player.position, 0.01);
-                }
+            // Blood Physics
+            blood.forEach((p, i) => {
+                p.position.add(p.userData.vel);
+                p.userData.vel.y -= 0.015;
+                if(p.position.y < 0) { scene.remove(p); blood.splice(i,1); }
             });
 
             renderer.render(scene, camera);
         }
 
-        // Run Init on Load
         window.onload = init;
     </script>
 </body>
