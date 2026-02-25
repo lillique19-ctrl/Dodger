@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nature & Blade: Dark Forest</title>
+    <title>Nature & Blade: Fixed POV</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        :root { --blood: #630000; --ui-gold: #c5a059; }
+        :root { --blood: #630000; }
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Georgia', serif; color: white; }
         
         #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 10; }
@@ -15,7 +15,7 @@
         #minimap { 
             position: absolute; bottom: 30px; right: 30px; width: 140px; height: 140px; 
             border: 1px solid #333; border-radius: 50%; background: rgba(0,5,0,0.9);
-            overflow: hidden; box-shadow: 0 0 20px #000;
+            overflow: hidden;
         }
         #mm-player { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #fff; border-radius: 50%; transform: translate(-50%, -50%); }
 
@@ -33,22 +33,18 @@
             cursor: pointer; border-radius: 50%; transition: 0.3s; color: #666; font-size: 0.7rem;
         }
         .wheel-item:hover { border-color: #fff; color: #fff; transform: scale(1.1); background: #111; }
-        .item-1 { transform: translateY(-120px); } /* Fist */
-        .item-2 { transform: translateX(120px); }  /* Sword */
-        .item-3 { transform: translateY(120px); }  /* Flashlight */
-        .item-4 { transform: translateX(-120px); } /* Gun */
+        .item-1 { transform: translateY(-120px); }
+        .item-2 { transform: translateX(120px); }
+        .item-3 { transform: translateY(120px); }
+        .item-4 { transform: translateX(-120px); }
 
-        #weather-shroud { position: fixed; inset: 0; pointer-events: none; transition: 5s ease; z-index: 5; }
-
-        /* LOADING SCREEN (UNTOUCHED PER REQUEST) */
+        /* LOADING SCREEN (UNTOUCHED) */
         #loading-screen { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .btn { background: none; border: 1px solid var(--blood); color: var(--blood); padding: 15px 40px; cursor: pointer; transition: 0.5s; }
         .btn:hover { background: var(--blood); color: white; }
     </style>
 </head>
 <body>
-
-    <div id="weather-shroud"></div>
 
     <div id="loading-screen">
         <h1 style="letter-spacing: 8px;">NATURE & BLADE</h1>
@@ -78,7 +74,6 @@
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x010101);
-            // Updated FOV to 60 per request
             camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -95,24 +90,20 @@
             player.position.y = 1;
             scene.add(player);
             
-            // Sword Model
-            sword = new THREE.Group();
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.2, 0.15), new THREE.MeshStandardMaterial({color: 0x888888}));
-            blade.position.y = 0.8;
-            sword.add(blade);
+            // Sword
+            sword = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.15), new THREE.MeshStandardMaterial({color: 0x888888}));
             sword.position.set(0.6, 0.2, -0.6);
             sword.visible = false;
             player.add(sword);
 
-            // Flashlight Model
+            // Flashlight
             flashlight = new THREE.Group();
             const flBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), new THREE.MeshStandardMaterial({color: 0x222222}));
             flBody.rotation.x = Math.PI / 2;
             flashlight.add(flBody);
             
-            // Actual Light Component
-            flashSpot = new THREE.SpotLight(0xffffff, 0, 40, Math.PI/6, 0.5, 1);
-            flashSpot.position.set(0, 0, -0.2);
+            flashSpot = new THREE.SpotLight(0xffffff, 0, 45, Math.PI/5, 0.4, 1);
+            flashSpot.position.set(0, 0, -0.1);
             flashSpot.target.position.set(0, 0, -10);
             flashlight.add(flashSpot);
             flashlight.add(flashSpot.target);
@@ -121,6 +112,7 @@
             flashlight.visible = false;
             player.add(flashlight);
 
+            // RIGGING: Camera is a child of PITCH, PITCH is child of YAW
             scene.add(yaw);
             yaw.add(pitch);
             pitch.add(camera);
@@ -148,13 +140,7 @@
                 if(e.code === 'KeyV') isFirstPerson = !isFirstPerson;
             });
 
-            window.addEventListener('keyup', e => {
-                keys[e.code] = false;
-                if(e.code === 'KeyQ') {
-                    document.getElementById('weapon-wheel').style.display = 'none';
-                    renderer.domElement.requestPointerLock();
-                }
-            });
+            window.addEventListener('keyup', e => keys[e.code] = false);
 
             document.addEventListener('mousemove', (e) => {
                 if (document.pointerLockElement === renderer.domElement) {
@@ -166,18 +152,14 @@
 
             window.addEventListener('mousedown', () => {
                 if(!isRunning) return;
-                
-                // Attack logic for Sword
                 if(sword.visible) {
-                    sword.rotation.x = -1.2;
-                    setTimeout(() => sword.rotation.x = 0, 100);
+                    sword.position.z = -1.2;
+                    setTimeout(() => sword.position.z = -0.6, 100);
                     spawnGore();
                 }
-                
-                // Toggle logic for Flashlight
                 if(flashlight.visible) {
                     lightOn = !lightOn;
-                    flashSpot.intensity = lightOn ? 2 : 0;
+                    flashSpot.intensity = lightOn ? 3 : 0;
                 }
             });
         }
@@ -185,8 +167,7 @@
         function selectWeapon(type) {
             sword.visible = (type === 'SWORD');
             flashlight.visible = (type === 'LIGHT');
-            if(!flashlight.visible) { lightOn = false; flashSpot.intensity = 0; } // Auto-off if put away
-            
+            if(!flashlight.visible) { lightOn = false; flashSpot.intensity = 0; }
             document.getElementById('weapon-wheel').style.display = 'none';
             renderer.domElement.requestPointerLock();
         }
@@ -197,13 +178,13 @@
                 if(rand < 0.4) { scene.fog = new THREE.FogExp2(0x050505, 0.15); } 
                 else if(rand < 0.7) { scene.fog = new THREE.FogExp2(0x0a0a15, 0.1); } 
                 else { scene.fog = new THREE.FogExp2(0x020202, 0.05); }
-                setTimeout(changeWeather, (Math.random() * (300000 - 120000) + 120000));
+                setTimeout(changeWeather, (Math.random() * (180000) + 120000)); // 2-5 mins
             };
             changeWeather();
         }
 
         function spawnGore() {
-            for(let i=0; i<12; i++) {
+            for(let i=0; i<10; i++) {
                 let p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({color: 0x440000}));
                 p.position.copy(player.position).add(new THREE.Vector3(0, 0.5, -1).applyQuaternion(player.quaternion));
                 p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.15, Math.random()*0.2, (Math.random()-0.5)*0.15);
@@ -218,26 +199,26 @@
             let delta = clock.getDelta();
             let moveSpeed = 8 * delta;
 
+            // Movement
             if(keys['KeyW']) player.translateZ(-moveSpeed);
             if(keys['KeyS']) player.translateZ(moveSpeed);
             if(keys['KeyA']) player.translateX(-moveSpeed);
             if(keys['KeyD']) player.translateX(moveSpeed);
 
+            // Fixed Camera Logic: Yaw stays on player
             yaw.position.copy(player.position);
             player.rotation.y = yaw.rotation.y;
 
+            // POV Switch: Instead of lerping, we set hard offsets relative to the rig
             if(isFirstPerson) {
-                camera.position.set(0, 1.6, 0);
-                // Attach flashlight to camera direction in FPS
-                if(flashlight.visible) {
-                    flashlight.rotation.x = pitch.rotation.x;
-                }
+                camera.position.set(0, 0.6, 0); // Eyes of the cylinder
+                if(flashlight.visible) flashlight.rotation.x = 0; 
             } else {
-                camera.position.set(0, 3, 8);
-                camera.lookAt(new THREE.Vector3(0, 1, -5).applyQuaternion(camera.quaternion).add(camera.position));
-                if(flashlight.visible) flashlight.rotation.x = 0;
+                camera.position.set(0, 2, 7); // Offset back 7 units
+                camera.lookAt(new THREE.Vector3(0, 0, -5).applyQuaternion(camera.quaternion).add(camera.position));
             }
 
+            // Clean up blood
             blood.forEach((p, i) => {
                 p.position.add(p.userData.vel);
                 p.userData.vel.y -= 0.01;
