@@ -2,122 +2,152 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nature & Blade: Fixed Edition</title>
+    <title>Nature & Blade: Ultimate Adventure</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; color: white; }
-        #loading-screen {
-            position: fixed; inset: 0; background: radial-gradient(circle, #1a1a1a, #000); z-index: 999;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        :root { --blood: #8a0303; --ui-cyan: #00f2ff; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; color: white; }
+        
+        /* UI & HUD */
+        #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 10; }
+        .hp-bar { position: absolute; top: 20px; left: 20px; width: 250px; height: 15px; border: 2px solid #fff; background: #111; }
+        #hp-fill { width: 100%; height: 100%; background: var(--blood); box-shadow: 0 0 15px red; }
+        
+        /* Mini-map */
+        #minimap { 
+            position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; 
+            border: 2px solid var(--ui-cyan); border-radius: 50%; background: rgba(0,20,0,0.7);
+            overflow: hidden;
         }
-        #hud { position: absolute; inset: 0; pointer-events: none; padding: 25px; display: none; }
-        .hp-bar { width: 250px; height: 12px; border: 2px solid #fff; background: #222; box-shadow: 0 0 10px rgba(255,0,0,0.5); }
-        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0044, #800000); }
-        #story-text { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); color: #ff0044; font-size: 1.5rem; text-align: center; opacity: 0; transition: 2s; }
-        .btn { background: #ff0044; color: white; border: none; padding: 20px 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; box-shadow: 0 0 20px #ff0044; }
-        .btn:hover { transform: scale(1.1); background: #ff4d79; }
-        #error-log { color: #555; font-size: 0.7rem; margin-top: 20px; }
+        #mm-player { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: white; border-radius: 50%; transform: translate(-50%, -50%); }
+
+        /* CIRCULAR WEAPON WHEEL */
+        #weapon-wheel {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+            display: none; align-items: center; justify-content: center; z-index: 1000;
+            pointer-events: auto;
+        }
+        .wheel {
+            position: relative; width: 400px; height: 400px; border-radius: 50%;
+            border: 4px solid var(--ui-cyan); display: flex; align-items: center; justify-content: center;
+        }
+        .wheel-item {
+            position: absolute; width: 80px; height: 80px; background: #222; border: 2px solid #555;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 10px;
+            transition: 0.2s; font-size: 0.8rem; font-weight: bold;
+        }
+        .wheel-item:hover { background: var(--blood); border-color: white; transform: scale(1.2); }
+        /* Position items in circle */
+        .item-1 { transform: translateY(-140px); }
+        .item-2 { transform: translateX(140px); }
+        .item-3 { transform: translateY(140px); }
+        .item-4 { transform: translateX(-140px); }
+
+        /* Weather Overlays */
+        #rain-overlay { position: fixed; inset: 0; pointer-events: none; background: url('https://www.transparenttextures.com/patterns/stardust.png'); opacity: 0; transition: 2s; z-index: 5; }
+        
+        #loading-screen { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { background: var(--blood); color: white; border: none; padding: 20px 60px; cursor: pointer; font-size: 1.5rem; letter-spacing: 5px; }
     </style>
 </head>
 <body>
 
+    <div id="rain-overlay"></div>
+
     <div id="loading-screen">
-        <h1 style="color: #ff0044; font-size: 3rem; margin-bottom: 10px;">NATURE & BLADE</h1>
-        <p style="color: #888; margin-bottom: 30px;">[ Gore & Adventure Simulation ]</p>
-        <button id="start-btn" class="btn">ENTER WORLD</button>
-        <div id="error-log">Verifying Engine Components...</div>
+        <h1 style="color: var(--blood); font-size: 4rem;">NATURE & BLADE</h1>
+        <button id="start-btn" class="btn">START</button>
     </div>
 
     <div id="hud">
         <div class="hp-bar"><div id="hp-fill"></div></div>
-        <div id="story-text">THE RED FOREST AWAKENS... <br> Slay the Corrupted.</div>
-        <div style="margin-top: 15px; color: #00ffcc;">C: Stealth | V: View | Q: Weapons | Left Click: Attack</div>
+        <div id="minimap"><div id="mm-player"></div></div>
+        <div style="position:absolute; top:50px; left:20px; font-size: 0.8rem; color: #aaa;">HOLD [Q] WEAPONS | V: POV | C: STEALTH</div>
+    </div>
+
+    <div id="weapon-wheel">
+        <div class="wheel">
+            <div class="wheel-item item-1" onclick="selectWeapon('FIST')">FISTS</div>
+            <div class="wheel-item item-2" onclick="selectWeapon('SWORD')">SWORD</div>
+            <div class="wheel-item item-3" onclick="selectWeapon('AXE')">AXE</div>
+            <div class="wheel-item item-4" onclick="selectWeapon('GUN')">GUN</div>
+            <div style="color: var(--ui-cyan)">SELECT WEAPON</div>
+        </div>
     </div>
 
     <script>
-        let scene, camera, renderer, player, clock;
-        let isRunning = false;
-        let enemies = [], blood = [], keys = {};
-        let isStealth = false, isFirstPerson = false;
+        let scene, camera, renderer, player, sword, clock;
+        let isRunning = false, keys = {}, blood = [];
         let yaw = new THREE.Object3D(), pitch = new THREE.Object3D();
+        let isFirstPerson = false, isStealth = false;
 
         function init() {
-            try {
-                scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x020202);
-                scene.fog = new THREE.FogExp2(0x020202, 0.04);
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                document.body.appendChild(renderer.domElement);
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x404040));
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(10, 20, 10);
+            scene.add(sun);
 
-                // Lighting
-                scene.add(new THREE.AmbientLight(0x404040, 0.5));
-                const sun = new THREE.DirectionalLight(0xffffff, 1);
-                sun.position.set(5, 15, 5);
-                scene.add(sun);
+            // Ground
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({color: 0x111a11}));
+            ground.rotation.x = -Math.PI/2;
+            scene.add(ground);
 
-                // Nature (Ground)
-                const ground = new THREE.Mesh(
-                    new THREE.PlaneGeometry(200, 200),
-                    new THREE.MeshStandardMaterial({color: 0x101510})
-                );
-                ground.rotation.x = -Math.PI / 2;
-                scene.add(ground);
+            // Player Rig
+            player = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2), new THREE.MeshStandardMaterial({color: 0x222222}));
+            player.position.y = 1;
+            scene.add(player);
+            
+            // Sword Mesh
+            const swordGeo = new THREE.BoxGeometry(0.1, 1.5, 0.3);
+            const swordMat = new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 0.8});
+            sword = new THREE.Mesh(swordGeo, swordMat);
+            sword.position.set(0.7, 0, -0.5);
+            player.add(sword);
 
-                // Player (Using Cylinder instead of Capsule to prevent errors)
-                player = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.5, 0.5, 2, 16),
-                    new THREE.MeshStandardMaterial({color: 0x333333})
-                );
-                player.position.y = 1;
-                scene.add(player);
-                
-                scene.add(yaw);
-                yaw.add(pitch);
-                pitch.add(camera);
+            scene.add(yaw);
+            yaw.add(pitch);
+            pitch.add(camera);
 
-                // Enemies
-                for(let i=0; i<8; i++) {
-                    let e = new THREE.Mesh(
-                        new THREE.BoxGeometry(1.2, 2, 1.2), 
-                        new THREE.MeshStandardMaterial({color: 0x880000})
-                    );
-                    e.position.set(Math.random()*40-20, 1, Math.random()*40-20);
-                    scene.add(e);
-                    enemies.push(e);
-                }
-
-                clock = new THREE.Clock();
-                document.getElementById('error-log').innerText = "All systems green.";
-                setupControls();
-            } catch (err) {
-                document.getElementById('error-log').innerText = "ERROR: " + err.message;
-            }
+            clock = new THREE.Clock();
+            setupControls();
+            startWeatherCycle();
         }
 
         function setupControls() {
             document.getElementById('start-btn').onclick = () => {
-                isRunning = true;
                 document.getElementById('loading-screen').style.display = 'none';
                 document.getElementById('hud').style.display = 'block';
-                
-                // Show Story Text
-                const story = document.getElementById('story-text');
-                story.style.opacity = '1';
-                setTimeout(() => story.style.opacity = '0', 4000);
-
+                isRunning = true;
                 renderer.domElement.requestPointerLock();
                 animate();
             };
 
             window.addEventListener('keydown', e => {
                 keys[e.code] = true;
+                if(e.code === 'KeyQ') {
+                    document.getElementById('weapon-wheel').style.display = 'flex';
+                    document.exitPointerLock();
+                }
                 if(e.code === 'KeyV') isFirstPerson = !isFirstPerson;
                 if(e.code === 'KeyC') isStealth = !isStealth;
             });
-            window.addEventListener('keyup', e => keys[e.code] = false);
+
+            window.addEventListener('keyup', e => {
+                keys[e.code] = false;
+                if(e.code === 'KeyQ') {
+                    document.getElementById('weapon-wheel').style.display = 'none';
+                    renderer.domElement.requestPointerLock();
+                }
+            });
 
             document.addEventListener('mousemove', (e) => {
                 if (document.pointerLockElement === renderer.domElement) {
@@ -127,17 +157,41 @@
                 }
             });
 
-            // Gore on click
             window.addEventListener('mousedown', () => {
-                if(isRunning) spawnBlood(player.position, 15);
+                if(isRunning) {
+                    sword.rotation.x = -1.5; // Swing animation
+                    setTimeout(() => sword.rotation.x = 0, 150);
+                    spawnGore();
+                }
             });
         }
 
-        function spawnBlood(pos, count) {
-            for(let i=0; i<count; i++) {
-                let p = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshBasicMaterial({color: 0xaa0000}));
-                p.position.copy(pos);
-                p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.4, (Math.random()-0.5)*0.3);
+        function selectWeapon(type) {
+            console.log("Selected:", type);
+            // In a full game, change sword mesh to gun/axe here
+        }
+
+        function startWeatherCycle() {
+            setInterval(() => {
+                const rand = Math.random();
+                if(rand < 0.3) { // Foggy
+                    scene.fog = new THREE.FogExp2(0x222222, 0.1);
+                    document.getElementById('rain-overlay').style.opacity = '0';
+                } else if(rand < 0.6) { // Rain + Fog
+                    scene.fog = new THREE.FogExp2(0x111122, 0.15);
+                    document.getElementById('rain-overlay').style.opacity = '0.5';
+                } else { // Clear
+                    scene.fog = new THREE.FogExp2(0x050505, 0.02);
+                    document.getElementById('rain-overlay').style.opacity = '0';
+                }
+            }, 10000); // Change every 10 seconds
+        }
+
+        function spawnGore() {
+            for(let i=0; i<15; i++) {
+                let p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({color: 0xaa0000}));
+                p.position.copy(player.position).add(new THREE.Vector3(0, 0.5, -1).applyQuaternion(player.quaternion));
+                p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.3, (Math.random()-0.5)*0.2);
                 scene.add(p);
                 blood.push(p);
             }
@@ -146,7 +200,6 @@
         function animate() {
             if(!isRunning) return;
             requestAnimationFrame(animate);
-
             let delta = clock.getDelta();
             let speed = (isStealth ? 4 : 12) * delta;
 
@@ -159,16 +212,15 @@
             player.rotation.y = yaw.rotation.y;
 
             if(isFirstPerson) {
-                camera.position.set(0, 1.6, 0);
+                camera.position.set(0, 1.5, 0);
             } else {
                 camera.position.set(0, 3, 7);
                 camera.lookAt(new THREE.Vector3(0, 1, -2).applyQuaternion(camera.quaternion).add(camera.position));
             }
 
-            // Blood Physics
             blood.forEach((p, i) => {
                 p.position.add(p.userData.vel);
-                p.userData.vel.y -= 0.015;
+                p.userData.vel.y -= 0.01;
                 if(p.position.y < 0) { scene.remove(p); blood.splice(i,1); }
             });
 
