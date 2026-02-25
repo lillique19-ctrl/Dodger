@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Dodger</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; overflow: hidden; }
+        canvas { border: 4px solid #00ffcc; background: #000; box-shadow: 0 0 20px #00ffcc; cursor: none; }
+        h1 { margin-bottom: 10px; text-shadow: 0 0 10px #00ffcc; }
+        .score { font-size: 24px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>NEON DODGER</h1>
+    <div class="score" id="scoreBoard">Score: 0</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreBoard = document.getElementById("scoreBoard");
+
+        // Set canvas size
+        canvas.width = 600;
+        canvas.height = 400;
+
+        // Game Variables
+        let score = 0;
+        let gameActive = true;
+        let player = { x: 50, y: 200, size: 20, color: "#00ffcc" };
+        let obstacles = [];
+        let frameCount = 0;
+
+        // Mouse/Touch Control
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            player.y = e.clientY - rect.top - player.size / 2;
+        });
+
+        function spawnObstacle() {
+            const size = Math.random() * (50 - 20) + 20;
+            const speed = Math.random() * (6 - 3) + 3 + (score / 10); // Gets faster over time
+            obstacles.push({
+                x: canvas.width,
+                y: Math.random() * (canvas.height - size),
+                width: size,
+                height: size,
+                speed: speed
+            });
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            frameCount++;
+            if (frameCount % 60 === 0) spawnObstacle();
+
+            // Move and filter obstacles
+            obstacles.forEach((obs, index) => {
+                obs.x -= obs.speed;
+
+                // Collision Detection
+                if (
+                    player.x < obs.x + obs.width &&
+                    player.x + player.size > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.size > obs.y
+                ) {
+                    gameOver();
+                }
+
+                // Remove off-screen obstacles and gain points
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(index, 1);
+                    score++;
+                    scoreBoard.innerText = `Score: ${score}`;
+                }
+            });
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Player
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = player.color;
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+
+            // Draw Obstacles
+            ctx.fillStyle = "#ff0066";
+            ctx.shadowColor = "#ff0066";
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            });
+
+            requestAnimationFrame(() => {
+                update();
+                draw();
+            });
+        }
+
+        function gameOver() {
+            gameActive = false;
+            alert(`GAME OVER! Final Score: ${score}`);
+            document.location.reload();
+        }
+
+        draw();
+    </script>
+</body>
+</html>
