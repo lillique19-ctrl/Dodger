@@ -1,80 +1,57 @@
 let scene, camera, renderer, player, clock;
-let isPaused = true;
-let isFirstPerson = false;
-let yaw = new THREE.Object3D(); // Horizontal rotation
-let pitch = new THREE.Object3D(); // Vertical rotation
-let particles = [];
-let keys = {};
+let yaw = new THREE.Object3D(), pitch = new THREE.Object3D();
+let isPaused = true, isFirstPerson = false, isStealth = false, isWheelOpen = false;
+let keys = {}, enemies = [], bloodParticles = [];
+let currentWeapon = 'FIST', takedownTarget = null;
 
-// Settings
-let settings = {
-    fov: 75,
-    sensitivity: 0.002,
-    smoothing: true,
-    headbob: true,
-    shake: 0
-};
+const settings = { fov: 75, sensitivity: 0.002, headbob: true };
 
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x050505);
     scene.fog = new THREE.FogExp2(0x050505, 0.05);
 
-    camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
-    
+    camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth/window.innerHeight, 0.1, 1000);
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    // Player & Camera Setup
-    player = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({ color: 0x444444 }));
-    player.position.y = 1;
+    // Player Rigging
+    player = new THREE.Group();
+    let body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshStandardMaterial({color: 0x444444}));
+    player.add(body);
     scene.add(player);
-
-    // Rigging camera to rotations
     scene.add(yaw);
     yaw.add(pitch);
-    // In TPS, the camera is a child of pitch but offset back
     pitch.add(camera);
 
-    // Lighting & World
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(10, 20, 10);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x404040));
+    // World & Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    let sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    sun.position.set(10, 20, 10);
+    scene.add(sun);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x112211 }));
-    ground.rotation.x = -Math.PI / 2;
+    let ground = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({color: 0x111811}));
+    ground.rotation.x = -Math.PI/2;
     scene.add(ground);
 
-    clock = new THREE.Clock();
+    // Spawn 5 AI Enemies
+    for(let i=0; i<5; i++) spawnEnemy(Math.random()*40-20, Math.random()*40-20);
 
-    setupListeners();
-    document.getElementById('start-btn').style.display = 'block';
+    clock = new THREE.Clock();
+    setupEvents();
 }
 
-function setupListeners() {
-    // Pointer Lock for FPS Cursor
-    renderer.domElement.addEventListener('click', () => {
-        if (!isPaused) renderer.domElement.requestPointerLock();
-    });
+function spawnEnemy(x, z) {
+    let e = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({color: 0xaa0000}));
+    e.position.set(x, 1, z);
+    e.userData = { hp: 100, state: 'patrol' };
+    scene.add(e);
+    enemies.push(e);
+}
 
-    document.addEventListener('mousemove', (e) => {
-        if (document.pointerLockElement === renderer.domElement && !isPaused) {
-            yaw.rotation.y -= e.movementX * settings.sensitivity;
-            pitch.rotation.x -= e.movementY * settings.sensitivity;
-            pitch.rotation.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch.rotation.x));
-        }
-    });
-
-    window.addEventListener('keydown', e => {
-        keys[e.code] = true;
-        if (e.code === 'KeyV') isFirstPerson = !isFirstPerson;
-        if (e.code === 'KeyP') toggleMenu();
-    });
-    window.addEventListener('keyup', e => keys[e.code] = false);
-    
+function setupEvents() {
     document.getElementById('start-btn').onclick = () => {
         document.getElementById('loading-screen').style.display = 'none';
         isPaused = false;
@@ -82,65 +59,142 @@ function setupListeners() {
         animate();
     };
 
-    document.getElementById('resume-btn').onclick = toggleMenu;
+    document.getElementById('resume-btn').onclick = () => {
+        isPaused = false;
+        document.getElementById('menu').style.display = 'none';
+        renderer.domElement.requestPointerLock();
+    };
+
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if(e.code === 'KeyV') isFirstPerson = !isFirstPerson;
+        if(e.code === 'KeyP') toggleMenu();
+        if(e.code === 'KeyC') toggleStealth();
+        if(e.code === 'KeyE') performTakedown();
+        if(e.code === 'KeyQ') toggleWheel(true);
+        if(['Digit1','Digit2','Digit3','Digit4'].includes(e.code)) switchWeapon(e.code);
+    });
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false;
+        if(e.code === 'KeyQ') toggleWheel(false);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (document.pointerLockElement === renderer.domElement && !isPaused) {
+            yaw.rotation.y -= e.movementX * settings.sensitivity;
+            pitch.rotation.x -= e.movementY * settings.sensitivity;
+            pitch.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch.rotation.x));
+        }
+    });
+
+    window.addEventListener('mousedown', () => { if(!isPaused && !isWheelOpen) attack(); });
 }
 
 function toggleMenu() {
     isPaused = !isPaused;
     document.getElementById('menu').style.display = isPaused ? 'flex' : 'none';
-    if (!isPaused) {
-        renderer.domElement.requestPointerLock();
-    } else {
-        document.exitPointerLock();
+    if(!isPaused) renderer.domElement.requestPointerLock();
+}
+
+function toggleStealth() {
+    isStealth = !isStealth;
+    document.getElementById('stealth-meter').style.display = isStealth ? 'block' : 'none';
+}
+
+function toggleWheel(open) {
+    isWheelOpen = open;
+    document.getElementById('weapon-wheel').style.display = open ? 'flex' : 'none';
+    if(open) document.exitPointerLock(); else renderer.domElement.requestPointerLock();
+}
+
+function switchWeapon(code) {
+    const map = {'Digit1':'FIST', 'Digit2':'KICK', 'Digit3':'SWORD', 'Digit4':'GUN'};
+    currentWeapon = map[code];
+    document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+    document.getElementById('slot-'+currentWeapon).classList.add('active');
+}
+
+function attack() {
+    enemies.forEach(enemy => {
+        if(player.position.distanceTo(enemy.position) < 4) {
+            enemy.userData.hp -= 30;
+            spawnBlood(enemy.position, 10);
+            if(enemy.userData.hp <= 0) killEnemy(enemy);
+        }
+    });
+}
+
+function performTakedown() {
+    if(takedownTarget) {
+        spawnBlood(takedownTarget.position, 50);
+        document.getElementById('vignette').classList.add('kill-flash');
+        setTimeout(()=> document.getElementById('vignette').classList.remove('kill-flash'), 400);
+        killEnemy(takedownTarget);
     }
 }
 
-function updateCamera() {
-    // Positioning the Rig on Player
-    yaw.position.copy(player.position);
-    yaw.position.y += 1.5;
+function killEnemy(enemy) {
+    scene.remove(enemy);
+    enemies = enemies.filter(e => e !== enemy);
+    takedownTarget = null;
+    document.getElementById('action-prompt').style.display = 'none';
+}
 
-    if (isFirstPerson) {
-        camera.position.set(0, 0, 0);
-        // Headbob
-        if (settings.headbob && (keys['KeyW'] || keys['KeyS'])) {
-            camera.position.y = Math.sin(Date.now() * 0.01) * 0.05;
-        }
-    } else {
-        // Third Person Camera + Collision
-        const idealOffset = new THREE.Vector3(0, 1, 5);
-        
-        // Simple Raycast for Collision
-        const rayDir = idealOffset.clone().applyQuaternion(yaw.quaternion).normalize();
-        const ray = new THREE.Raycaster(player.position, rayDir, 0, 5);
-        const intersects = ray.intersectObjects(scene.children);
-        
-        if (intersects.length > 0) {
-            camera.position.set(0, 1, intersects[0].distance - 0.5);
-        } else {
-            camera.position.lerp(idealOffset, 0.1); // Camera Smoothing
-        }
+function spawnBlood(pos, count) {
+    for(let i=0; i<count; i++) {
+        let p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({color: 0x880000}));
+        p.position.copy(pos);
+        p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.3, (Math.random()-0.5)*0.3);
+        scene.add(p);
+        bloodParticles.push(p);
     }
 }
 
 function animate() {
-    if (isPaused) return;
+    if(isPaused || isWheelOpen) return;
     requestAnimationFrame(animate);
+    let delta = clock.getDelta();
 
-    const delta = clock.getDelta();
-    const moveSpeed = 10 * delta;
+    // Movement
+    let speed = (isStealth ? 4 : 10) * delta;
+    if(keys['KeyW']) player.translateZ(-speed);
+    if(keys['KeyS']) player.translateZ(speed);
+    if(keys['KeyA']) player.translateX(-speed);
+    if(keys['KeyD']) player.translateX(speed);
 
-    // Movement relative to camera view
-    if (keys['KeyW']) player.translateZ(-moveSpeed);
-    if (keys['KeyS']) player.translateZ(moveSpeed);
-    if (keys['KeyA']) player.translateX(-moveSpeed);
-    if (keys['KeyD']) player.translateX(moveSpeed);
-
-    // Update Player Rotation to match Camera Yaw (except in some free-look cases)
     player.rotation.y = yaw.rotation.y;
+    yaw.position.copy(player.position);
 
-    updateCamera();
+    // Camera Mode
+    if(isFirstPerson) {
+        camera.position.set(0, 1.5, 0);
+    } else {
+        camera.position.lerp(new THREE.Vector3(0, 2, 6), 0.1);
+    }
+
+    // AI & Takedown Check
+    takedownTarget = null;
+    enemies.forEach(e => {
+        let dist = player.position.distanceTo(e.position);
+        if(dist < 15 && !isStealth) e.position.lerp(player.position, 0.01);
+        
+        // Stealth Takedown Logic
+        if(isStealth && dist < 2.5) {
+            takedownTarget = e;
+            document.getElementById('action-prompt').innerText = "PRESS [E] TO KILL";
+            document.getElementById('action-prompt').style.display = 'block';
+        }
+    });
+    if(!takedownTarget) document.getElementById('action-prompt').style.display = 'none';
+
+    // Blood particles
+    bloodParticles.forEach((p, i) => {
+        p.position.add(p.userData.vel);
+        p.userData.vel.y -= 0.01;
+        if(p.position.y < 0) { scene.remove(p); bloodParticles.splice(i,1); }
+    });
+
     renderer.render(scene, camera);
 }
 
-window.onload = init;
+init();
