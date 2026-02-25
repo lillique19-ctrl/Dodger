@@ -2,220 +2,46 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nature & Blade: Gore Adventure</title>
-    <style>
-        :root { --blood: #990000; --interface: #00ff88; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
-        
-        /* LOADING SCREEN */
-        #loading-screen {
-            position: fixed; inset: 0; background: radial-gradient(circle, #111, #000);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 9999; color: white;
-        }
-        .blood-bar { width: 300px; height: 4px; background: #222; margin-top: 20px; position: relative; }
-        .blood-progress { width: 0%; height: 100%; background: var(--blood); box-shadow: 0 0 10px red; animation: load 2s forwards; }
-        @keyframes load { 100% { width: 100%; } }
-        
-        /* MENU */
-        #menu { 
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
-            display: none; flex-direction: column; align-items: center; justify-content: center; 
-            z-index: 8000; 
-        }
-
-        /* HUD */
-        #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 100; }
-        .hp-box { position: absolute; top: 20px; left: 20px; width: 250px; height: 20px; border: 2px solid white; }
-        #hp-fill { width: 100%; height: 100%; background: linear-gradient(to right, var(--blood), #ff0000); }
-        #minimap { position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; border-radius: 50%; border: 2px solid var(--interface); background: rgba(0,40,0,0.5); }
-        
-        /* WEAPON WHEEL */
-        #weapon-wheel { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
-        .slot { width: 60px; height: 60px; background: rgba(0,0,0,0.8); border: 1px solid #444; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: 0.2s; }
-        .active { border: 2px solid var(--interface); box-shadow: 0 0 15px var(--interface); transform: translateY(-5px); }
-
-        .btn { background: var(--blood); color: white; border: none; padding: 15px 40px; cursor: pointer; font-weight: bold; margin-top: 20px; }
-        .btn:hover { background: #ff0000; }
-    </style>
+    <title>Nature & Blade: Pro Edition</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <div id="loading-screen">
-        <h1 style="letter-spacing: 10px;">NATURE & BLADE</h1>
-        <div class="blood-bar"><div class="blood-progress"></div></div>
-        <p id="status">INITIALIZING SYSTEM...</p>
-        <button class="btn" onclick="startEngine()" id="manual-start" style="display:none;">FORCE START</button>
-    </div>
-
-    <div id="menu">
-        <h2 style="color: var(--blood); font-size: 3rem;">PAUSED</h2>
-        <button class="btn" onclick="resume()">RESUME ADVENTURE</button>
-        <p style="color: #666; margin-top: 20px;">STORY: Slay the Corrupted Heart of the Woods.</p>
+        <h1>NATURE & BLADE</h1>
+        <div class="loader"></div>
+        <button id="start-btn" class="btn" style="display:none;">ENTER WORLD</button>
     </div>
 
     <div id="hud">
-        <div class="hp-box"><div id="hp-fill"></div></div>
+        <div class="hp-container"><div id="hp-fill"></div></div>
         <div id="minimap"></div>
-        <div id="weapon-wheel">
-            <div id="w1" class="slot active">FIST</div>
-            <div id="w2" class="slot">KICK</div>
-            <div id="w3" class="slot">SWORD</div>
+        <div class="instructions">P: Menu | V: Change View | Left Click: Attack</div>
+    </div>
+
+    <div id="menu">
+        <div class="menu-content">
+            <h1>SETTINGS</h1>
+            <div class="setting-row">
+                <label>FOV</label>
+                <input type="range" id="fov" min="50" max="110" value="75">
+            </div>
+            <div class="setting-row">
+                <label>Sensitivity</label>
+                <input type="range" id="sensitivity" min="1" max="10" value="5">
+            </div>
+            <div class="setting-row">
+                <label>Camera Smoothing</label>
+                <input type="checkbox" id="smoothing" checked>
+            </div>
+            <div class="setting-row">
+                <label>Head Bob</label>
+                <input type="checkbox" id="headbob" checked>
+            </div>
+            <button class="btn" id="resume-btn">RESUME</button>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-    <script>
-        let scene, camera, renderer, player, clock;
-        let isRunning = false;
-        let particles = [];
-        let keys = {};
-
-        // 1. Initialization
-        function init() {
-            try {
-                scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x020502);
-                scene.fog = new THREE.FogExp2(0x020502, 0.05);
-
-                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.shadowMap.enabled = true;
-                document.body.appendChild(renderer.domElement);
-
-                // Lighting
-                const light = new THREE.DirectionalLight(0xffffff, 1);
-                light.position.set(5, 10, 5);
-                light.castShadow = true;
-                scene.add(light);
-                scene.add(new THREE.AmbientLight(0x204020, 0.5));
-
-                // World (Nature)
-                const ground = new THREE.Mesh(
-                    new THREE.PlaneGeometry(200, 200),
-                    new THREE.MeshStandardMaterial({ color: 0x0a1a0a })
-                );
-                ground.rotation.x = -Math.PI / 2;
-                ground.receiveShadow = true;
-                scene.add(ground);
-
-                // Trees (Adventure Atmosphere)
-                for(let i=0; i<40; i++) {
-                    const tree = new THREE.Mesh(
-                        new THREE.CylinderGeometry(0.2, 0.5, 5),
-                        new THREE.MeshStandardMaterial({ color: 0x1a0a00 })
-                    );
-                    tree.position.set(Math.random()*100-50, 2.5, Math.random()*100-50);
-                    scene.add(tree);
-                }
-
-                // Player
-                player = new THREE.Mesh(
-                    new THREE.BoxGeometry(1, 2, 1),
-                    new THREE.MeshStandardMaterial({ color: 0x555555 })
-                );
-                player.position.y = 1;
-                player.castShadow = true;
-                scene.add(player);
-
-                clock = new THREE.Clock();
-
-                // Setup successful
-                document.getElementById('status').innerText = "WORLD LOADED";
-                document.getElementById('manual-start').style.display = "block";
-            } catch (e) {
-                document.getElementById('status').innerText = "ERROR: Browser Blocked WebGL";
-                console.error(e);
-            }
-        }
-
-        function startEngine() {
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('hud').style.display = 'block';
-            isRunning = true;
-            animate();
-        }
-
-        function resume() {
-            document.getElementById('menu').style.display = 'none';
-            isRunning = true;
-        }
-
-        // Combat & Gore logic
-        function attack() {
-            for(let i=0; i<20; i++) {
-                const p = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.1, 0.1, 0.1),
-                    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-                );
-                p.position.copy(player.position);
-                p.position.z -= 1;
-                p.userData.velocity = new THREE.Vector3(
-                    (Math.random()-0.5)*0.2,
-                    Math.random()*0.2,
-                    -Math.random()*0.4
-                );
-                scene.add(p);
-                particles.push(p);
-            }
-        }
-
-        function animate() {
-            if (!isRunning) return;
-            requestAnimationFrame(animate);
-
-            const delta = clock.getDelta();
-            const moveSpeed = 10 * delta;
-
-            // Controls
-            if (keys['KeyW']) player.position.z -= moveSpeed;
-            if (keys['KeyS']) player.position.z += moveSpeed;
-            if (keys['KeyA']) player.position.x -= moveSpeed;
-            if (keys['KeyD']) player.position.x += moveSpeed;
-
-            // Weapon switching
-            if (keys['Digit1']) switchW(1);
-            if (keys['Digit2']) switchW(2);
-            if (keys['Digit3']) switchW(3);
-
-            // Camera follow (3rd Person)
-            camera.position.lerp(new THREE.Vector3(player.position.x, player.position.y + 5, player.position.z + 10), 0.1);
-            camera.lookAt(player.position);
-
-            // Gore Physics
-            particles.forEach((p, i) => {
-                p.position.add(p.userData.velocity);
-                p.userData.velocity.y -= 0.01;
-                if(p.position.y < 0) {
-                    scene.remove(p);
-                    particles.splice(i, 1);
-                }
-            });
-
-            renderer.render(scene, camera);
-        }
-
-        function switchW(id) {
-            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
-            document.getElementById('w'+id).classList.add('active');
-        }
-
-        window.addEventListener('keydown', e => {
-            keys[e.code] = true;
-            if (e.code === 'KeyP') {
-                isRunning = !isRunning;
-                document.getElementById('menu').style.display = isRunning ? 'none' : 'flex';
-                if (isRunning) animate();
-            }
-        });
-        window.addEventListener('keyup', e => keys[e.code] = false);
-        window.addEventListener('mousedown', () => { if(isRunning) attack(); });
-
-        // Start init on window load
-        window.onload = init;
-    </script>
+    <script src="game.js"></script>
 </body>
 </html>
