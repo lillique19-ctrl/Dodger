@@ -2,49 +2,155 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nature & Blade: Ultimate</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Nature & Blade: Hard-Wired</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; color: white; }
+        #loading-screen {
+            position: fixed; inset: 0; background: #000; z-index: 999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        #hud { position: absolute; inset: 0; pointer-events: none; padding: 20px; display: none; }
+        .hp-bar { width: 200px; height: 10px; border: 1px solid white; background: #222; }
+        #hp-fill { width: 100%; height: 100%; background: #ff0044; }
+        #action-prompt { position: fixed; top: 70%; left: 50%; transform: translateX(-50%); color: #ff0044; display: none; font-weight: bold; }
+        .btn { background: #ff0044; color: white; border: none; padding: 20px 40px; cursor: pointer; font-size: 1.2rem; }
+        #error-log { color: #ffcc00; font-size: 0.8rem; margin-top: 20px; }
+    </style>
 </head>
 <body>
+
     <div id="loading-screen">
-        <h1 style="letter-spacing: 10px; color: #ff0044;">NATURE & BLADE</h1>
-        <div class="loader"></div>
+        <h1 style="color: #ff0044;">NATURE & BLADE</h1>
         <button id="start-btn" class="btn">ENTER WORLD</button>
+        <div id="error-log">Waiting for engine...</div>
     </div>
 
-    <div id="vignette"></div>
-    <div id="action-prompt"></div>
-    
     <div id="hud">
-        <div class="hp-container"><div id="hp-fill"></div></div>
-        <div id="stealth-meter"><div id="stealth-fill"></div></div>
-        <div id="minimap"></div>
-        <div class="controls-hint">WASD: Move | C: Stealth | V: POV | Q: Wheel | E: Takedown | Click: Attack</div>
+        <div class="hp-bar"><div id="hp-fill"></div></div>
+        <div style="margin-top: 10px;">C: Stealth | V: Change POV | Click: Attack</div>
+        <div id="action-prompt">PRESS [E] FOR TAKEDOWN</div>
     </div>
 
-    <div id="weapon-wheel">
-        <div class="wheel-container">
-            <div class="slot active" id="slot-FIST">FIST [1]</div>
-            <div class="slot" id="slot-KICK">KICK [2]</div>
-            <div class="slot" id="slot-SWORD">SWORD [3]</div>
-            <div class="slot" id="slot-GUN">GUN [4]</div>
-        </div>
-    </div>
+    <script>
+        // --- GLOBAL VARIABLES ---
+        let scene, camera, renderer, player, clock;
+        let isRunning = false;
+        let enemies = [], blood = [], keys = {};
+        let isStealth = false, isFirstPerson = false;
+        let yaw = new THREE.Object3D();
+        let pitch = new THREE.Object3D();
 
-    <div id="menu">
-        <div class="menu-content">
-            <h1>PAUSED</h1>
-            <button class="btn" id="resume-btn">RESUME</button>
-            <hr>
-            <label>FOV</label>
-            <input type="range" id="fov-slider" min="60" max="110" value="75">
-            <label>Sensitivity</label>
-            <input type="range" id="sens-slider" min="1" max="10" value="5">
-        </div>
-    </div>
+        // --- THE ENGINE ---
+        function init() {
+            try {
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x050505);
+                scene.fog = new THREE.FogExp2(0x050505, 0.05);
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="game.js"></script>
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+
+                // World Setup
+                const light = new THREE.DirectionalLight(0xffffff, 1);
+                light.position.set(5, 10, 5);
+                scene.add(light);
+                scene.add(new THREE.AmbientLight(0x404040));
+
+                const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x111a11}));
+                ground.rotation.x = -Math.PI/2;
+                scene.add(ground);
+
+                // Player Rig
+                player = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshStandardMaterial({color: 0x444444}));
+                player.position.y = 1;
+                scene.add(player);
+                
+                scene.add(yaw);
+                yaw.add(pitch);
+                pitch.add(camera);
+
+                // Enemies
+                for(let i=0; i<5; i++) {
+                    let e = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({color: 0xaa0000}));
+                    e.position.set(Math.random()*20-10, 1, Math.random()*20-10);
+                    e.userData = {hp: 100};
+                    scene.add(e);
+                    enemies.push(e);
+                }
+
+                clock = new THREE.Clock();
+                document.getElementById('error-log').innerText = "Engine Ready. Click Enter.";
+                
+                setupControls();
+            } catch (err) {
+                document.getElementById('error-log').innerText = "FATAL ERROR: " + err.message;
+            }
+        }
+
+        function setupControls() {
+            document.getElementById('start-btn').onclick = () => {
+                isRunning = true;
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('hud').style.display = 'block';
+                renderer.domElement.requestPointerLock();
+                animate();
+            };
+
+            window.addEventListener('keydown', e => {
+                keys[e.code] = true;
+                if(e.code === 'KeyC') isStealth = !isStealth;
+                if(e.code === 'KeyV') isFirstPerson = !isFirstPerson;
+            });
+            window.addEventListener('keyup', e => keys[e.code] = false);
+
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === renderer.domElement) {
+                    yaw.rotation.y -= e.movementX * 0.002;
+                    pitch.rotation.x -= e.movementY * 0.002;
+                    pitch.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch.rotation.x));
+                }
+            });
+        }
+
+        function animate() {
+            if(!isRunning) return;
+            requestAnimationFrame(animate);
+
+            let delta = clock.getDelta();
+            let speed = (isStealth ? 3 : 10) * delta;
+
+            // Basic Movement
+            if(keys['KeyW']) player.translateZ(-speed);
+            if(keys['KeyS']) player.translateZ(speed);
+            if(keys['KeyA']) player.translateX(-speed);
+            if(keys['KeyD']) player.translateX(speed);
+
+            yaw.position.copy(player.position);
+            player.rotation.y = yaw.rotation.y;
+
+            // Camera View
+            if(isFirstPerson) {
+                camera.position.set(0, 1.5, 0);
+            } else {
+                camera.position.set(0, 2, 6);
+                camera.lookAt(new THREE.Vector3(0, 1, -2).applyQuaternion(camera.quaternion).add(camera.position));
+            }
+
+            // Simple AI Chase
+            enemies.forEach(e => {
+                if(e.position.distanceTo(player.position) < 10 && !isStealth) {
+                    e.position.lerp(player.position, 0.01);
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Run Init on Load
+        window.onload = init;
+    </script>
 </body>
 </html>
