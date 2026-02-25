@@ -8,12 +8,10 @@
         :root { --blood: #630000; --ui-gold: #c5a059; }
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Georgia', serif; color: white; }
         
-        /* HUD */
         #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 10; }
         .hp-bar { position: absolute; top: 30px; left: 30px; width: 200px; height: 8px; border: 1px solid #444; background: #000; }
         #hp-fill { width: 100%; height: 100%; background: var(--blood); }
         
-        /* Mini-map */
         #minimap { 
             position: absolute; bottom: 30px; right: 30px; width: 140px; height: 140px; 
             border: 1px solid #333; border-radius: 50%; background: rgba(0,5,0,0.9);
@@ -21,7 +19,6 @@
         }
         #mm-player { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #fff; border-radius: 50%; transform: translate(-50%, -50%); }
 
-        /* REAL CIRCULAR WEAPON WHEEL */
         #weapon-wheel {
             position: fixed; inset: 0; background: rgba(0,0,0,0.9);
             display: none; align-items: center; justify-content: center; z-index: 1000;
@@ -35,15 +32,15 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
             cursor: pointer; border-radius: 50%; transition: 0.3s; color: #666; font-size: 0.7rem;
         }
-        .wheel-item:hover { border-color: var(--blood); color: #fff; transform: scale(1.1); background: #111; }
+        .wheel-item:hover { border-color: #fff; color: #fff; transform: scale(1.1); background: #111; }
         .item-1 { transform: translateY(-120px); } /* Fist */
         .item-2 { transform: translateX(120px); }  /* Sword */
-        .item-3 { transform: translateY(120px); }  /* Axe */
+        .item-3 { transform: translateY(120px); }  /* Flashlight */
         .item-4 { transform: translateX(-120px); } /* Gun */
 
-        /* Weather effects */
         #weather-shroud { position: fixed; inset: 0; pointer-events: none; transition: 5s ease; z-index: 5; }
 
+        /* LOADING SCREEN (UNTOUCHED PER REQUEST) */
         #loading-screen { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .btn { background: none; border: 1px solid var(--blood); color: var(--blood); padding: 15px 40px; cursor: pointer; transition: 0.5s; }
         .btn:hover { background: var(--blood); color: white; }
@@ -66,55 +63,63 @@
     <div id="weapon-wheel">
         <div class="wheel">
             <div class="wheel-item item-1" onclick="selectWeapon('FIST')">FISTS</div>
-            <div class="wheel-item item-2" onclick="selectWeapon('SWORD')"><span>🗡️</span>SWORD</div>
-            <div class="wheel-item item-3" onclick="selectWeapon('AXE')">AXE</div>
+            <div class="wheel-item item-2" onclick="selectWeapon('SWORD')">SWORD</div>
+            <div class="wheel-item item-3" onclick="selectWeapon('LIGHT')">FLASHLIGHT</div>
             <div class="wheel-item item-4" onclick="selectWeapon('GUN')">GUN</div>
         </div>
     </div>
 
     <script>
-        let scene, camera, renderer, player, sword, clock;
+        let scene, camera, renderer, player, sword, flashlight, flashSpot, clock;
         let isRunning = false, keys = {}, blood = [];
         let yaw = new THREE.Object3D(), pitch = new THREE.Object3D();
-        let isFirstPerson = false;
+        let isFirstPerson = false, lightOn = false;
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020202);
-            // FOV set to 45 for "Hard to see far away" effect
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+            scene.background = new THREE.Color(0x010101);
+            // Updated FOV to 60 per request
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Very dark ambient light
-            scene.add(new THREE.AmbientLight(0x111111));
-            const sun = new THREE.DirectionalLight(0xffffff, 0.3);
-            sun.position.set(5, 10, 5);
-            scene.add(sun);
+            scene.add(new THREE.AmbientLight(0x050505));
 
-            // Ground
             const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({color: 0x050805}));
             ground.rotation.x = -Math.PI/2;
             scene.add(ground);
 
-            // Player
             player = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 2), new THREE.MeshStandardMaterial({color: 0x111111}));
             player.position.y = 1;
             scene.add(player);
             
-            // Build Sword (Invisible at start)
-            const swordGroup = new THREE.Group();
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.2, 0.15), new THREE.MeshStandardMaterial({color: 0x666666, metalness: 1}));
-            const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4), new THREE.MeshStandardMaterial({color: 0x221100}));
+            // Sword Model
+            sword = new THREE.Group();
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.2, 0.15), new THREE.MeshStandardMaterial({color: 0x888888}));
             blade.position.y = 0.8;
-            swordGroup.add(blade);
-            swordGroup.add(handle);
-            sword = swordGroup;
+            sword.add(blade);
             sword.position.set(0.6, 0.2, -0.6);
-            sword.visible = false; // Player starts with fists
+            sword.visible = false;
             player.add(sword);
+
+            // Flashlight Model
+            flashlight = new THREE.Group();
+            const flBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), new THREE.MeshStandardMaterial({color: 0x222222}));
+            flBody.rotation.x = Math.PI / 2;
+            flashlight.add(flBody);
+            
+            // Actual Light Component
+            flashSpot = new THREE.SpotLight(0xffffff, 0, 40, Math.PI/6, 0.5, 1);
+            flashSpot.position.set(0, 0, -0.2);
+            flashSpot.target.position.set(0, 0, -10);
+            flashlight.add(flashSpot);
+            flashlight.add(flashSpot.target);
+
+            flashlight.position.set(0.6, 0.2, -0.6);
+            flashlight.visible = false;
+            player.add(flashlight);
 
             scene.add(yaw);
             yaw.add(pitch);
@@ -160,18 +165,28 @@
             });
 
             window.addEventListener('mousedown', () => {
-                if(isRunning && sword.visible) {
-                    // Attack Animation
+                if(!isRunning) return;
+                
+                // Attack logic for Sword
+                if(sword.visible) {
                     sword.rotation.x = -1.2;
                     setTimeout(() => sword.rotation.x = 0, 100);
                     spawnGore();
+                }
+                
+                // Toggle logic for Flashlight
+                if(flashlight.visible) {
+                    lightOn = !lightOn;
+                    flashSpot.intensity = lightOn ? 2 : 0;
                 }
             });
         }
 
         function selectWeapon(type) {
-            // Only spawn sword into hand if Sword is selected
             sword.visible = (type === 'SWORD');
+            flashlight.visible = (type === 'LIGHT');
+            if(!flashlight.visible) { lightOn = false; flashSpot.intensity = 0; } // Auto-off if put away
+            
             document.getElementById('weapon-wheel').style.display = 'none';
             renderer.domElement.requestPointerLock();
         }
@@ -179,22 +194,10 @@
         function startWeatherCycle() {
             const changeWeather = () => {
                 const rand = Math.random();
-                const shroud = document.getElementById('weather-shroud');
-                
-                if(rand < 0.4) { // Heavy Fog
-                    scene.fog = new THREE.FogExp2(0x050505, 0.15);
-                    shroud.style.background = "rgba(0,0,0,0.4)";
-                } else if(rand < 0.7) { // Rain & Storm
-                    scene.fog = new THREE.FogExp2(0x0a0a15, 0.1);
-                    shroud.style.background = "rgba(20,20,40,0.5)";
-                } else { // Clear but Dark
-                    scene.fog = new THREE.FogExp2(0x020202, 0.05);
-                    shroud.style.background = "transparent";
-                }
-                
-                // Set next weather change between 2 and 5 minutes
-                const nextChange = (Math.random() * (300000 - 120000) + 120000);
-                setTimeout(changeWeather, nextChange);
+                if(rand < 0.4) { scene.fog = new THREE.FogExp2(0x050505, 0.15); } 
+                else if(rand < 0.7) { scene.fog = new THREE.FogExp2(0x0a0a15, 0.1); } 
+                else { scene.fog = new THREE.FogExp2(0x020202, 0.05); }
+                setTimeout(changeWeather, (Math.random() * (300000 - 120000) + 120000));
             };
             changeWeather();
         }
@@ -225,9 +228,14 @@
 
             if(isFirstPerson) {
                 camera.position.set(0, 1.6, 0);
+                // Attach flashlight to camera direction in FPS
+                if(flashlight.visible) {
+                    flashlight.rotation.x = pitch.rotation.x;
+                }
             } else {
                 camera.position.set(0, 3, 8);
                 camera.lookAt(new THREE.Vector3(0, 1, -5).applyQuaternion(camera.quaternion).add(camera.position));
+                if(flashlight.visible) flashlight.rotation.x = 0;
             }
 
             blood.forEach((p, i) => {
