@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nature & Blade: Absolute Control</title>
+    <title>Nature & Blade: Stable Controls</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root { --blood: #630000; }
@@ -13,7 +13,7 @@
             position: fixed; top: 50%; left: 50%;
             width: 4px; height: 4px; background: white;
             border-radius: 50%; transform: translate(-50%, -50%);
-            z-index: 100; pointer-events: none; opacity: 0.8;
+            z-index: 100; pointer-events: none;
         }
 
         #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 10; }
@@ -37,8 +37,9 @@
         .item-3 { transform: translateY(110px); }
         .item-4 { transform: translateX(-110px); }
 
+        /* LOADING SCREEN (REVERTED) */
         #loading-screen { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn { background: none; border: 1px solid var(--blood); color: var(--blood); padding: 15px 40px; cursor: pointer; font-weight: bold; }
+        .btn { background: none; border: 1px solid var(--blood); color: var(--blood); padding: 15px 40px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         .btn:hover { background: var(--blood); color: white; }
     </style>
 </head>
@@ -69,8 +70,9 @@
         let isRunning = false, keys = {}, blood = [];
         let isFirstPerson = false, lightOn = false;
         
-        // Mouse look variables
-        let yaw = 0, pitch = 0;
+        // Control Objects
+        const pitchObj = new THREE.Object3D();
+        const yawObj = new THREE.Object3D();
 
         function init() {
             scene = new THREE.Scene();
@@ -81,7 +83,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Lighting Buff
+            // Lighting
             scene.add(new THREE.AmbientLight(0x333333));
             const sun = new THREE.DirectionalLight(0xffffff, 0.5);
             sun.position.set(5, 20, 5);
@@ -91,13 +93,24 @@
             ground.rotation.x = -Math.PI/2;
             scene.add(ground);
 
-            player = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2), new THREE.MeshStandardMaterial({color: 0x222222}));
-            player.position.set(0, 1, 0);
+            // PLAYER ASSEMBLY
+            player = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2), new THREE.MeshStandardMaterial({color: 0x222222}));
+            player.add(body);
             scene.add(player);
+
+            // ATTACH CAMERA RIG
+            player.add(yawObj);
+            yawObj.add(pitchObj);
+            pitchObj.add(camera);
+            
+            // Set initial 3rd Person
+            camera.position.set(0, 3, 7);
+            camera.lookAt(0, 1, 0);
 
             // Sword
             sword = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.2), new THREE.MeshStandardMaterial({color: 0x999999}));
-            sword.position.set(0.6, 0.2, -0.8);
+            sword.position.set(0.6, 0.5, -0.8);
             sword.visible = false;
             player.add(sword);
 
@@ -110,7 +123,7 @@
             flashSpot.position.set(0, 0, -0.1);
             flashSpot.target.position.set(0, 0, -5);
             flashlight.add(flashSpot); flashlight.add(flashSpot.target);
-            flashlight.position.set(0.6, 0.2, -0.8);
+            flashlight.position.set(0.6, 0.5, -0.8);
             flashlight.visible = false;
             player.add(flashlight);
 
@@ -120,58 +133,68 @@
 
         function setupControls() {
             document.getElementById('start-btn').onclick = () => {
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('hud').style.display = 'block';
-                isRunning = true;
                 renderer.domElement.requestPointerLock();
-                animate();
             };
+
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === renderer.domElement) {
+                    document.getElementById('loading-screen').style.display = 'none';
+                    document.getElementById('hud').style.display = 'block';
+                    isRunning = true;
+                } else {
+                    isRunning = false;
+                }
+            });
 
             window.addEventListener('keydown', e => {
                 keys[e.code] = true;
-                if(e.code === 'KeyV') isFirstPerson = !isFirstPerson;
-                if(e.code === 'KeyQ') {
-                    document.getElementById('weapon-wheel').style.display = 'flex';
-                    document.exitPointerLock();
-                }
+                if(e.code === 'KeyV') togglePOV();
+                if(e.code === 'KeyQ') document.getElementById('weapon-wheel').style.display = 'flex';
             });
             window.addEventListener('keyup', e => {
                 keys[e.code] = false;
-                if(e.code === 'KeyQ') {
-                    document.getElementById('weapon-wheel').style.display = 'none';
-                    renderer.domElement.requestPointerLock();
-                }
+                if(e.code === 'KeyQ') document.getElementById('weapon-wheel').style.display = 'none';
             });
 
             document.addEventListener('mousemove', (e) => {
                 if (document.pointerLockElement === renderer.domElement) {
-                    yaw -= e.movementX * 0.002;
-                    pitch -= e.movementY * 0.002;
-                    pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch));
+                    player.rotation.y -= e.movementX * 0.002;
+                    pitchObj.rotation.x -= e.movementY * 0.002;
+                    pitchObj.rotation.x = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitchObj.rotation.x));
                 }
             });
 
             window.addEventListener('mousedown', () => {
                 if(!isRunning) return;
                 if(sword.visible) {
-                    sword.position.z = -1.2; setTimeout(()=>sword.position.z = -0.8, 100);
+                    sword.rotation.x = -1; setTimeout(()=>sword.rotation.x = 0, 100);
                     spawnGore();
                 }
                 if(flashlight.visible) { lightOn = !lightOn; flashSpot.intensity = lightOn ? 5 : 0; }
             });
         }
 
+        function togglePOV() {
+            isFirstPerson = !isFirstPerson;
+            if(isFirstPerson) {
+                camera.position.set(0, 0.7, 0);
+                camera.lookAt(0, 0.7, -1);
+            } else {
+                camera.position.set(0, 3, 7);
+                camera.lookAt(0, 1, 0);
+            }
+        }
+
         function selectWeapon(type) {
             sword.visible = (type === 'SWORD');
             flashlight.visible = (type === 'LIGHT');
             document.getElementById('weapon-wheel').style.display = 'none';
-            renderer.domElement.requestPointerLock();
         }
 
         function spawnGore() {
             for(let i=0; i<5; i++) {
                 let p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({color: 0x880000}));
-                p.position.copy(player.position).add(new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion));
+                p.position.copy(player.position).add(new THREE.Vector3(0,0.5,-1).applyQuaternion(player.quaternion));
                 p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2, (Math.random()-0.5)*0.2);
                 scene.add(p);
                 blood.push(p);
@@ -179,34 +202,19 @@
         }
 
         function animate() {
-            if(!isRunning) return;
             requestAnimationFrame(animate);
+            if(!isRunning) return;
+            
             let delta = clock.getDelta();
             let moveSpeed = (keys['ShiftLeft'] ? 18 : 10) * delta;
 
-            // 1. ROTATE PLAYER BODY (Horizontal looking)
-            player.rotation.y = yaw;
+            if(keys['KeyW']) player.translateZ(-moveSpeed);
+            if(keys['KeyS']) player.translateZ(moveSpeed);
+            if(keys['KeyA']) player.translateX(-moveSpeed);
+            if(keys['KeyD']) player.translateX(moveSpeed);
 
-            // 2. MOVE PLAYER BODY (Using absolute directions)
-            let dirForward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
-            let dirRight = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
-
-            if(keys['KeyW']) player.position.addScaledVector(dirForward, moveSpeed);
-            if(keys['KeyS']) player.position.addScaledVector(dirForward, -moveSpeed);
-            if(keys['KeyA']) player.position.addScaledVector(dirRight, -moveSpeed);
-            if(keys['KeyD']) player.position.addScaledVector(dirRight, moveSpeed);
-
-            // 3. UPDATE CAMERA POSITION & LOOK (Vertical looking)
-            if(isFirstPerson) {
-                camera.position.copy(player.position).add(new THREE.Vector3(0, 0.7, 0));
-                camera.rotation.set(pitch, yaw, 0, 'YXZ');
-                if(flashlight.visible) flashlight.rotation.x = pitch;
-            } else {
-                // 3rd Person logic
-                let camOffset = new THREE.Vector3(0, 3, 7).applyQuaternion(player.quaternion);
-                camera.position.copy(player.position).add(camOffset);
-                camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1, 0)));
-            }
+            // Sync flashlight to look direction
+            if(flashlight.visible) flashlight.rotation.x = pitchObj.rotation.x;
 
             blood.forEach((p, i) => {
                 p.position.add(p.userData.vel);
@@ -216,7 +224,8 @@
 
             renderer.render(scene, camera);
         }
-        window.onload = init;
+        init();
+        animate();
     </script>
 </body>
 </html>
