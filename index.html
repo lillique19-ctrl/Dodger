@@ -2,42 +2,45 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nature & Blade: Pro Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nature & Blade: Ultimate</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="loading-screen">
-        <h1>NATURE & BLADE</h1>
+        <h1 style="letter-spacing: 10px; color: #ff0044;">NATURE & BLADE</h1>
         <div class="loader"></div>
-        <button id="start-btn" class="btn" style="display:none;">ENTER WORLD</button>
+        <button id="start-btn" class="btn">ENTER WORLD</button>
     </div>
 
+    <div id="vignette"></div>
+    <div id="action-prompt"></div>
+    
     <div id="hud">
         <div class="hp-container"><div id="hp-fill"></div></div>
+        <div id="stealth-meter"><div id="stealth-fill"></div></div>
         <div id="minimap"></div>
-        <div class="instructions">P: Menu | V: Change View | Left Click: Attack</div>
+        <div class="controls-hint">WASD: Move | C: Stealth | V: POV | Q: Wheel | E: Takedown | Click: Attack</div>
+    </div>
+
+    <div id="weapon-wheel">
+        <div class="wheel-container">
+            <div class="slot active" id="slot-FIST">FIST [1]</div>
+            <div class="slot" id="slot-KICK">KICK [2]</div>
+            <div class="slot" id="slot-SWORD">SWORD [3]</div>
+            <div class="slot" id="slot-GUN">GUN [4]</div>
+        </div>
     </div>
 
     <div id="menu">
         <div class="menu-content">
-            <h1>SETTINGS</h1>
-            <div class="setting-row">
-                <label>FOV</label>
-                <input type="range" id="fov" min="50" max="110" value="75">
-            </div>
-            <div class="setting-row">
-                <label>Sensitivity</label>
-                <input type="range" id="sensitivity" min="1" max="10" value="5">
-            </div>
-            <div class="setting-row">
-                <label>Camera Smoothing</label>
-                <input type="checkbox" id="smoothing" checked>
-            </div>
-            <div class="setting-row">
-                <label>Head Bob</label>
-                <input type="checkbox" id="headbob" checked>
-            </div>
+            <h1>PAUSED</h1>
             <button class="btn" id="resume-btn">RESUME</button>
+            <hr>
+            <label>FOV</label>
+            <input type="range" id="fov-slider" min="60" max="110" value="75">
+            <label>Sensitivity</label>
+            <input type="range" id="sens-slider" min="1" max="10" value="5">
         </div>
     </div>
 
