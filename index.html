@@ -2,115 +2,187 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Dodger</title>
+    <title>Nature & Blade: Gore Adventure</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; overflow: hidden; }
-        canvas { border: 4px solid #00ffcc; background: #000; box-shadow: 0 0 20px #00ffcc; cursor: none; }
-        h1 { margin-bottom: 10px; text-shadow: 0 0 10px #00ffcc; }
-        .score { font-size: 24px; margin-bottom: 10px; }
+        :root { --neon-red: #ff0044; --blood-dark: #800000; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Courier New', Courier, monospace; }
+        
+        /* --- LOADING SCREEN --- */
+        #loading-screen {
+            position: fixed; inset: 0; background: #000; z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .blood-drip { width: 200px; height: 10px; background: var(--blood-dark); position: relative; overflow: hidden; }
+        .blood-drip::after { content: ''; position: absolute; left: -100%; width: 100%; height: 100%; background: var(--neon-red); animation: load 3s forwards; }
+        @keyframes load { 100% { left: 0; } }
+
+        /* --- UI & MENU --- */
+        .overlay { position: absolute; inset: 0; pointer-events: none; display: none; }
+        #main-menu { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; z-index: 500; }
+        .btn { background: none; border: 2px solid var(--neon-red); color: white; padding: 15px 40px; margin: 10px; cursor: pointer; font-size: 1.5rem; transition: 0.3s; pointer-events: auto; }
+        .btn:hover { background: var(--neon-red); box-shadow: 0 0 20px var(--neon-red); }
+
+        /* --- HUD Elements --- */
+        #hud { display: none; }
+        #hp-bar { position: absolute; top: 30px; left: 30px; width: 300px; height: 20px; border: 2px solid #fff; background: #222; }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #440000); transition: 0.2s; }
+        #minimap { position: absolute; bottom: 30px; right: 30px; width: 180px; height: 180px; background: rgba(0,20,0,0.7); border: 3px solid #444; border-radius: 50%; overflow: hidden; }
+        #minimap-player { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; background: white; border-radius: 50%; transform: translate(-50%, -50%); }
+        
+        /* --- WEAPON WHEEL --- */
+        #weapon-wheel { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: auto; }
+        .slot { width: 70px; height: 70px; border: 2px solid #555; background: rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-size: 0.6rem; }
+        .active { border-color: var(--neon-red); background: rgba(255,0,0,0.2); transform: scale(1.1); }
+
+        #story-box { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); color: white; text-align: center; font-style: italic; text-shadow: 2px 2px #000; }
     </style>
 </head>
 <body>
 
-    <h1>NEON DODGER</h1>
-    <div class="score" id="scoreBoard">Score: 0</div>
-    <canvas id="gameCanvas"></canvas>
+    <div id="loading-screen">
+        <h1 style="color: var(--neon-red);">INITIALIZING NATURE...</h1>
+        <div class="blood-drip"></div>
+    </div>
+
+    <div id="main-menu">
+        <h1 style="color: white; font-size: 4rem; margin-bottom: 0;">NATURE & BLADE</h1>
+        <p style="color: var(--neon-red); margin-bottom: 40px;">STORY MODE: THE RED HARVEST</p>
+        <button class="btn" onclick="startApp()">START ADVENTURE</button>
+        <button class="btn" onclick="alert('Controls: WASD-Move, CLICK-Attack, 1-3-Weapons, P-Pause')">INSTRUCTIONS</button>
+    </div>
+
+    <div id="hud" class="overlay">
+        <div id="hp-bar"><div id="hp-fill"></div></div>
+        <div id="story-box">Quest: Slay the corrupted shadows in the forest.</div>
+        <div id="weapon-wheel">
+            <div class="slot active" id="w1"><b>FIST</b>[1]</div>
+            <div class="slot" id="w2"><b>KICK</b>[2]</div>
+            <div class="slot" id="w3"><b>SWORD</b>[3]</div>
+        </div>
+        <div id="minimap"><div id="minimap-player"></div></div>
+    </div>
 
     <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const scoreBoard = document.getElementById("scoreBoard");
+        let scene, camera, renderer, player, clock, isPaused = true;
+        let keys = {};
+        let bloodParticles = [];
 
-        // Set canvas size
-        canvas.width = 600;
-        canvas.height = 400;
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050805);
+            scene.fog = new THREE.FogExp2(0x050805, 0.05);
 
-        // Game Variables
-        let score = 0;
-        let gameActive = true;
-        let player = { x: 50, y: 200, size: 20, color: "#00ffcc" };
-        let obstacles = [];
-        let frameCount = 0;
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
 
-        // Mouse/Touch Control
-        canvas.addEventListener("mousemove", (e) => {
-            const rect = canvas.getBoundingClientRect();
-            player.y = e.clientY - rect.top - player.size / 2;
-        });
+            // Lighting (High Quality Shadows)
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 5);
+            light.castShadow = true;
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040, 0.5));
 
-        function spawnObstacle() {
-            const size = Math.random() * (50 - 20) + 20;
-            const speed = Math.random() * (6 - 3) + 3 + (score / 10); // Gets faster over time
-            obstacles.push({
-                x: canvas.width,
-                y: Math.random() * (canvas.height - size),
-                width: size,
-                height: size,
-                speed: speed
+            // Nature: Ground with "Gore" patches
+            const groundGeo = new THREE.PlaneGeometry(200, 200);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a2e1a });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI/2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Player Setup
+            const playerGeo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
+            const playerMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+            player = new THREE.Mesh(playerGeo, playerMat);
+            player.position.y = 1;
+            player.castShadow = true;
+            scene.add(player);
+
+            clock = new THREE.Clock();
+
+            // Combat / Gore Listener
+            window.addEventListener('mousedown', () => { if(!isPaused) dealDamage(); });
+            window.addEventListener('keydown', (e) => { 
+                keys[e.code] = true;
+                if(e.code === 'KeyP') togglePause();
+                if(['Digit1','Digit2','Digit3'].includes(e.code)) switchWeapon(e.code);
             });
+            window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+            animate();
         }
 
-        function update() {
-            if (!gameActive) return;
+        function startApp() {
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            isPaused = false;
+        }
 
-            frameCount++;
-            if (frameCount % 60 === 0) spawnObstacle();
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById('main-menu').style.display = isPaused ? 'flex' : 'none';
+        }
 
-            // Move and filter obstacles
-            obstacles.forEach((obs, index) => {
-                obs.x -= obs.speed;
+        function switchWeapon(code) {
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+            if(code === 'Digit1') document.getElementById('w1').classList.add('active');
+            if(code === 'Digit2') document.getElementById('w2').classList.add('active');
+            if(code === 'Digit3') document.getElementById('w3').classList.add('active');
+        }
 
-                // Collision Detection
-                if (
-                    player.x < obs.x + obs.width &&
-                    player.x + player.size > obs.x &&
-                    player.y < obs.y + obs.height &&
-                    player.y + player.size > obs.y
-                ) {
-                    gameOver();
+        function dealDamage() {
+            // Visual Gore Effect: Spawn red particles
+            for(let i=0; i<15; i++) {
+                const pGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                const pMat = new THREE.MeshBasicMaterial({ color: 0xaa0000 });
+                const p = new THREE.Mesh(pGeo, pMat);
+                p.position.set(player.position.x, player.position.y + 0.5, player.position.z - 1);
+                p.userData.velocity = new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2, -Math.random()*0.5);
+                scene.add(p);
+                bloodParticles.push(p);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(isPaused) return;
+
+            const delta = clock.getDelta();
+            const moveSpeed = 10 * delta;
+
+            if(keys['KeyW']) player.position.z -= moveSpeed;
+            if(keys['KeyS']) player.position.z += moveSpeed;
+            if(keys['KeyA']) player.position.x -= moveSpeed;
+            if(keys['KeyD']) player.position.x += moveSpeed;
+
+            // Camera follow
+            camera.position.lerp(new THREE.Vector3(player.position.x, player.position.y + 4, player.position.z + 8), 0.1);
+            camera.lookAt(player.position);
+
+            // Handle Blood Particles (Gore Physics)
+            bloodParticles.forEach((p, i) => {
+                p.position.add(p.userData.velocity);
+                p.userData.velocity.y -= 0.01; // Gravity
+                if(p.position.y <= 0) {
+                    scene.remove(p);
+                    bloodParticles.splice(i, 1);
                 }
-
-                // Remove off-screen obstacles and gain points
-                if (obs.x + obs.width < 0) {
-                    obstacles.splice(index, 1);
-                    score++;
-                    scoreBoard.innerText = `Score: ${score}`;
-                }
-            });
-        }
-
-        function draw() {
-            // Clear canvas
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Draw Player
-            ctx.fillStyle = player.color;
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = player.color;
-            ctx.fillRect(player.x, player.y, player.size, player.size);
-
-            // Draw Obstacles
-            ctx.fillStyle = "#ff0066";
-            ctx.shadowColor = "#ff0066";
-            obstacles.forEach(obs => {
-                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
             });
 
-            requestAnimationFrame(() => {
-                update();
-                draw();
-            });
+            renderer.render(scene, camera);
         }
 
-        function gameOver() {
-            gameActive = false;
-            alert(`GAME OVER! Final Score: ${score}`);
-            document.location.reload();
-        }
-
-        draw();
+        // Auto-run after simulated load
+        setTimeout(() => {
+            init();
+            document.querySelector('#loading-screen h1').innerText = "READY TO KILL";
+        }, 2000);
     </script>
 </body>
 </html>
