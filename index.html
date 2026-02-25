@@ -2,190 +2,219 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nature & Blade: Fixed Edition</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nature & Blade: Gore Adventure</title>
     <style>
-        :root { --blood: #bc0000; --ui-gold: #ffcc00; }
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Verdana', sans-serif; color: white; }
+        :root { --blood: #990000; --interface: #00ff88; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
         
-        /* --- COOL LOADING SCREEN --- */
+        /* LOADING SCREEN */
         #loading-screen {
-            position: fixed; inset: 0; background: #050505; z-index: 2000;
+            position: fixed; inset: 0; background: radial-gradient(circle, #111, #000);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: opacity 1s ease;
+            z-index: 9999; color: white;
         }
-        .spinner { width: 50px; height: 50px; border: 3px solid #333; border-top: 3px solid var(--blood); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        /* --- MENU UI --- */
-        #menu-ui {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 1000; display: none; /* Shown via JS */
-        }
-        .btn {
-            background: rgba(188, 0, 0, 0.2); border: 1px solid var(--blood); color: white;
-            padding: 15px 50px; margin: 10px; cursor: pointer; font-size: 1.2rem;
-            transition: 0.3s; width: 250px; text-transform: uppercase; letter-spacing: 2px;
-        }
-        .btn:hover { background: var(--blood); box-shadow: 0 0 15px var(--blood); }
-
-        /* --- HUD / OVERLAYS --- */
-        #hud { position: absolute; inset: 0; pointer-events: none; display: none; }
-        #hp-container { position: absolute; top: 20px; left: 20px; width: 300px; height: 15px; border: 1px solid #fff; }
-        #hp-fill { width: 100%; height: 100%; background: var(--blood); box-shadow: 0 0 10px red; }
+        .blood-bar { width: 300px; height: 4px; background: #222; margin-top: 20px; position: relative; }
+        .blood-progress { width: 0%; height: 100%; background: var(--blood); box-shadow: 0 0 10px red; animation: load 2s forwards; }
+        @keyframes load { 100% { width: 100%; } }
         
-        #weapon-wheel { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
-        .slot { width: 60px; height: 60px; border: 1px solid #555; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; }
-        .active-slot { border: 2px solid var(--ui-gold); box-shadow: 0 0 10px var(--ui-gold); }
+        /* MENU */
+        #menu { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
+            display: none; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 8000; 
+        }
 
-        #minimap { position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; border: 2px solid #444; border-radius: 50%; background: rgba(0,30,0,0.5); }
+        /* HUD */
+        #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 100; }
+        .hp-box { position: absolute; top: 20px; left: 20px; width: 250px; height: 20px; border: 2px solid white; }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(to right, var(--blood), #ff0000); }
+        #minimap { position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; border-radius: 50%; border: 2px solid var(--interface); background: rgba(0,40,0,0.5); }
+        
+        /* WEAPON WHEEL */
+        #weapon-wheel { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
+        .slot { width: 60px; height: 60px; background: rgba(0,0,0,0.8); border: 1px solid #444; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: 0.2s; }
+        .active { border: 2px solid var(--interface); box-shadow: 0 0 15px var(--interface); transform: translateY(-5px); }
+
+        .btn { background: var(--blood); color: white; border: none; padding: 15px 40px; cursor: pointer; font-weight: bold; margin-top: 20px; }
+        .btn:hover { background: #ff0000; }
     </style>
 </head>
 <body>
 
     <div id="loading-screen">
-        <div class="spinner"></div>
-        <h1 id="load-text" style="margin-top: 20px; letter-spacing: 5px;">LOADING WORLD...</h1>
+        <h1 style="letter-spacing: 10px;">NATURE & BLADE</h1>
+        <div class="blood-bar"><div class="blood-progress"></div></div>
+        <p id="status">INITIALIZING SYSTEM...</p>
+        <button class="btn" onclick="startEngine()" id="manual-start" style="display:none;">FORCE START</button>
     </div>
 
-    <div id="menu-ui">
-        <h1 style="font-size: 3.5rem; color: var(--blood); margin-bottom: 0;">NATURE & BLADE</h1>
-        <p style="margin-bottom: 30px; color: #888;">STORY: THE RED AWAKENING</p>
-        <button class="btn" onclick="toggleGame(true)">RESUME / START</button>
-        <button class="btn" onclick="location.reload()">RESTART</button>
+    <div id="menu">
+        <h2 style="color: var(--blood); font-size: 3rem;">PAUSED</h2>
+        <button class="btn" onclick="resume()">RESUME ADVENTURE</button>
+        <p style="color: #666; margin-top: 20px;">STORY: Slay the Corrupted Heart of the Woods.</p>
     </div>
 
     <div id="hud">
-        <div id="hp-container"><div id="hp-fill"></div></div>
-        <div id="weapon-wheel">
-            <div id="slot-1" class="slot active-slot">FIST</div>
-            <div id="slot-2" class="slot">KICK</div>
-            <div id="slot-3" class="slot">SWORD</div>
-        </div>
+        <div class="hp-box"><div id="hp-fill"></div></div>
         <div id="minimap"></div>
-        <div style="position: absolute; top: 20px; right: 20px; color: #ff0000;">STORY: Slay the Void</div>
+        <div id="weapon-wheel">
+            <div id="w1" class="slot active">FIST</div>
+            <div id="w2" class="slot">KICK</div>
+            <div id="w3" class="slot">SWORD</div>
+        </div>
     </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
         let scene, camera, renderer, player, clock;
-        let isPaused = true;
+        let isRunning = false;
+        let particles = [];
         let keys = {};
-        let bloodPool = [];
 
+        // 1. Initialization
         function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020402);
-            scene.fog = new THREE.FogExp2(0x020402, 0.04);
+            try {
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x020502);
+                scene.fog = new THREE.FogExp2(0x020502, 0.05);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+                document.body.appendChild(renderer.domElement);
 
-            // Lighting
-            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-            sun.position.set(10, 20, 10);
-            sun.castShadow = true;
-            scene.add(sun);
-            scene.add(new THREE.AmbientLight(0x404040, 0.5));
+                // Lighting
+                const light = new THREE.DirectionalLight(0xffffff, 1);
+                light.position.set(5, 10, 5);
+                light.castShadow = true;
+                scene.add(light);
+                scene.add(new THREE.AmbientLight(0x204020, 0.5));
 
-            // Ground
-            const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(500, 500),
-                new THREE.MeshStandardMaterial({ color: 0x152015 })
-            );
-            floor.rotation.x = -Math.PI / 2;
-            floor.receiveShadow = true;
-            scene.add(floor);
+                // World (Nature)
+                const ground = new THREE.Mesh(
+                    new THREE.PlaneGeometry(200, 200),
+                    new THREE.MeshStandardMaterial({ color: 0x0a1a0a })
+                );
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                scene.add(ground);
 
-            // Player Character
-            player = new THREE.Mesh(
-                new THREE.CapsuleGeometry(0.4, 1, 4, 8),
-                new THREE.MeshStandardMaterial({ color: 0xdddddd })
-            );
-            player.position.y = 1;
-            player.castShadow = true;
-            scene.add(player);
+                // Trees (Adventure Atmosphere)
+                for(let i=0; i<40; i++) {
+                    const tree = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.2, 0.5, 5),
+                        new THREE.MeshStandardMaterial({ color: 0x1a0a00 })
+                    );
+                    tree.position.set(Math.random()*100-50, 2.5, Math.random()*100-50);
+                    scene.add(tree);
+                }
 
-            clock = new THREE.Clock();
+                // Player
+                player = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 2, 1),
+                    new THREE.MeshStandardMaterial({ color: 0x555555 })
+                );
+                player.position.y = 1;
+                player.castShadow = true;
+                scene.add(player);
 
-            // Input Listeners
-            window.addEventListener('keydown', e => { 
-                keys[e.code] = true; 
-                if(e.code === 'KeyP') toggleGame(!isPaused);
-                if(e.code === 'Digit1') setWeapon(1);
-                if(e.code === 'Digit2') setWeapon(2);
-                if(e.code === 'Digit3') setWeapon(3);
-            });
-            window.addEventListener('keyup', e => keys[e.code] = false);
-            window.addEventListener('mousedown', () => { if(!isPaused) spawnGore(); });
+                clock = new THREE.Clock();
 
-            // Finalize Load
-            document.getElementById('loading-screen').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('menu-ui').style.display = 'flex';
-            }, 1000);
-            
+                // Setup successful
+                document.getElementById('status').innerText = "WORLD LOADED";
+                document.getElementById('manual-start').style.display = "block";
+            } catch (e) {
+                document.getElementById('status').innerText = "ERROR: Browser Blocked WebGL";
+                console.error(e);
+            }
+        }
+
+        function startEngine() {
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            isRunning = true;
             animate();
         }
 
-        function toggleGame(run) {
-            isPaused = !run;
-            document.getElementById('menu-ui').style.display = run ? 'none' : 'flex';
-            document.getElementById('hud').style.display = run ? 'block' : 'none';
+        function resume() {
+            document.getElementById('menu').style.display = 'none';
+            isRunning = true;
         }
 
-        function setWeapon(num) {
-            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active-slot'));
-            document.getElementById('slot-' + num).classList.add('active-slot');
-        }
-
-        function spawnGore() {
-            for(let i=0; i<10; i++) {
-                const particle = new THREE.Mesh(
+        // Combat & Gore logic
+        function attack() {
+            for(let i=0; i<20; i++) {
+                const p = new THREE.Mesh(
                     new THREE.BoxGeometry(0.1, 0.1, 0.1),
                     new THREE.MeshBasicMaterial({ color: 0xff0000 })
                 );
-                particle.position.set(player.position.x, player.position.y + 0.5, player.position.z - 1);
-                particle.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2, (Math.random()-0.5)*0.2);
-                scene.add(particle);
-                bloodPool.push(particle);
+                p.position.copy(player.position);
+                p.position.z -= 1;
+                p.userData.velocity = new THREE.Vector3(
+                    (Math.random()-0.5)*0.2,
+                    Math.random()*0.2,
+                    -Math.random()*0.4
+                );
+                scene.add(p);
+                particles.push(p);
             }
         }
 
         function animate() {
+            if (!isRunning) return;
             requestAnimationFrame(animate);
-            if(isPaused) return;
 
-            const dt = clock.getDelta();
-            const speed = 8 * dt;
+            const delta = clock.getDelta();
+            const moveSpeed = 10 * delta;
 
-            if(keys['KeyW']) player.position.z -= speed;
-            if(keys['KeyS']) player.position.z += speed;
-            if(keys['KeyA']) player.position.x -= speed;
-            if(keys['KeyD']) player.position.x += speed;
+            // Controls
+            if (keys['KeyW']) player.position.z -= moveSpeed;
+            if (keys['KeyS']) player.position.z += moveSpeed;
+            if (keys['KeyA']) player.position.x -= moveSpeed;
+            if (keys['KeyD']) player.position.x += moveSpeed;
 
-            // Camera follow
-            camera.position.lerp(new THREE.Vector3(player.position.x, player.position.y + 4, player.position.z + 7), 0.1);
+            // Weapon switching
+            if (keys['Digit1']) switchW(1);
+            if (keys['Digit2']) switchW(2);
+            if (keys['Digit3']) switchW(3);
+
+            // Camera follow (3rd Person)
+            camera.position.lerp(new THREE.Vector3(player.position.x, player.position.y + 5, player.position.z + 10), 0.1);
             camera.lookAt(player.position);
 
-            // Blood Physics
-            bloodPool.forEach((p, i) => {
-                p.position.add(p.userData.vel);
-                p.userData.vel.y -= 0.01;
+            // Gore Physics
+            particles.forEach((p, i) => {
+                p.position.add(p.userData.velocity);
+                p.userData.velocity.y -= 0.01;
                 if(p.position.y < 0) {
                     scene.remove(p);
-                    bloodPool.splice(i, 1);
+                    particles.splice(i, 1);
                 }
             });
 
             renderer.render(scene, camera);
         }
 
-        // Start Logic
+        function switchW(id) {
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+            document.getElementById('w'+id).classList.add('active');
+        }
+
+        window.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            if (e.code === 'KeyP') {
+                isRunning = !isRunning;
+                document.getElementById('menu').style.display = isRunning ? 'none' : 'flex';
+                if (isRunning) animate();
+            }
+        });
+        window.addEventListener('keyup', e => keys[e.code] = false);
+        window.addEventListener('mousedown', () => { if(isRunning) attack(); });
+
+        // Start init on window load
         window.onload = init;
     </script>
 </body>
